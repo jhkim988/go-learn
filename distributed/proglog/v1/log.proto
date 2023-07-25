@@ -1,0 +1,23 @@
+syntax = "proto3"; // protobuf 버전 명시
+
+package log.v1; // protoc로 생성된 고 코드의 패키지명, 같은 이름을 가진 메세지 자료형 사이의 충돌을 막아준다.
+
+option go_package = "github.com/jhkim988/api/log_v1";
+
+// Go struct 에 대응된다.
+// [자료형] [변수명] = [Field ID]
+// 필드 번호를 바꾸면 안된다. 번호로 버전관리 가능
+// log.v1 에서 v1 이 메이저 버전이다. 호환성을 깨고 다음 버전을 만들려면 api/v2 에 새로운 메세지를 추가한다.
+message Record {
+  bytes value = 1;
+  uint64 offset = 2;
+}
+
+// protobuf 를 원하는 언어로 컴파일하려면 해당 언어의 런타임이 필요하다.
+// go 에서는 Go APIv2
+// go get google.golang.org/protobuf/...
+
+// 컴파일 명령어
+// protoc api/v1/*.proto --go_out=. --go_opt=paths=resource-relative --proto_path=.
+
+// Makefile 을 만들어두면 편리하다.

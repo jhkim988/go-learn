@@ -1,0 +1,5 @@
+syntax = "proto3";
+package twitter;
+message Tweet {
+  string message = 1;
+}
