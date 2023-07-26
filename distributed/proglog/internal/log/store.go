@@ -66,6 +66,7 @@ func (s *store) Read(pos uint64) ([]byte, error) {
 	s.mu.Lock();
 	defer s.mu.Unlock();
 
+	// 데이터가 아직 버퍼에 있는 상황을 대비하여 버퍼를 비운다.
 	if err := s.buf.Flush(); err != nil {
 		return nil, err
 	}
@@ -83,4 +84,26 @@ func (s *store) Read(pos uint64) ([]byte, error) {
 	}
 
 	return b, nil
+}
+
+// off 부터 len(p) 바이트만큼 읽는다.
+func (s *store) ReadAt(p []byte, off int64) (int, error) {
+	s.mu.Lock();
+	defer s.mu.Unlock();
+
+	if err := s.buf.Flush(); err != nil {
+		return 0, err
+	}
+
+	return s.File.ReadAt(p, off)
+}
+
+func (s *store) Close() error {
+	s.mu.Lock();
+	defer s.mu.Unlock();
+
+	if err := s.buf.Flush(); err != nil {
+		return err
+	}
+	return s.File.Close()
 }
