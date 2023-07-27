@@ -1,7 +1,6 @@
 package log
 
 import (
-	"fmt"
 	"io"
 	"os"
 
@@ -55,20 +54,23 @@ func (i *index) Close() error {
 	if err := i.mmap.Sync(gommap.MS_SYNC); err != nil {
 		return err
 	}
-	i.mmap.UnsafeUnmap()
-	
+
+	// Unmap 해야 Truncate 가능하다!
+	if err := i.mmap.UnsafeUnmap(); err != nil {
+		return err
+	}
+
 	// 파일의 현재 내용을 안정적인 저장소에 커밋한다. (메모리 -> 디스크)
 	if err := i.file.Sync(); err != nil {
 		return err
 	}
-
 	// 실제 데이터가 있는만큼 잘라낸다.(truncate)
 	// 레코드를 로그의 어디에 추가할지 오프셋을 알아야 하는데, 마지막 항목의 인덱스를 찾아보면 다음 레코드의 오프셋을 알 수 있다.(인덱스의 마지막 12바이트)
 	// 메모리맵 파일을 사용하기 위해 파일크기를 최대로 늘리면 이 방법을 사용할 수 없다. (뒤에 빈공간이 있으면 안됨)
 	if err := i.file.Truncate(int64(i.size)); err != nil {
 		return err
 	}
-	fmt.Printf("close: i.size - %d", i.size);
+
 	return i.file.Close()
 }
 // 비정상종료 - 파일을 잘라내는 도중 전원이 끊길 수 있다.
@@ -86,7 +88,7 @@ func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 	} else {
 		out = uint32(in)
 	}
-	fmt.Printf("i.size - %d, out - %d\n", i.size, out);
+
 	pos = uint64(out) * entWidth
 	if (i.size < pos+entWidth) {
 		return 0, 0, io.EOF
