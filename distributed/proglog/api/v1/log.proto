@@ -21,3 +21,29 @@ message Record {
 // protoc api/v1/*.proto --go_out=. --go_opt=paths=resource-relative --proto_path=.
 
 // Makefile 을 만들어두면 편리하다.
+
+
+// gRPC: RPC 엔드포인트를 묶은 그룹.
+// 서비스를 protobuf 로 정의하고 프로토콜 버퍼를 클라이언트와 서버로 된 코드로 컴파일하여 구현한다.
+service Log {
+  rpc Produce(ProduceRequest) returns (ProduceResponse) {}
+  rpc Consume(ConsumeRequest) returns (ConsumeResponse) {}
+  rpc ConsumeStream(ConsumeRequest) returns (stream ConsumeResponse) {} // 서버 측 스트리밍, 서버는 연속한 메세지들을 읽을 수 있는 스트림을 보내준다.
+  rpc ProduceStream(stream ProduceRequest) returns (stream ProduceResponse) {} // 양방향 스트리밍 RPC, 서로 독립적인 스트림이므로, 원하는 순서로 주고 받을 수 있다.
+}
+
+message ProduceRequest {
+  Record record = 1;
+}
+
+message ProduceResponse {
+  uint64 offset = 1;
+}
+
+message ConsumeRequest {
+  uint64 offset = 1;
+}
+
+message ConsumeResponse {
+  Record record = 1;
+}
