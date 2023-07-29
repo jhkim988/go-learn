@@ -1,7 +1,6 @@
 package log
 
 import (
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -83,15 +82,17 @@ func (l *Log) newSegment(off uint64) error {
 func (l *Log) Append(record *api.Record) (uint64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-		
-	if l.activeSegment.IsMaxed() {
-		off := l.activeSegment.nextOffset
-		if err := l.newSegment(off); err != nil {
-			return 0, err
-		}
-	}
 
-	return l.activeSegment.Append(record)
+	off, err := l.activeSegment.Append(record)
+	if err != nil {
+		return 0, err
+	}
+	
+	if l.activeSegment.IsMaxed() {
+		err = l.newSegment(off + 1)
+	}
+	
+	return off, err
 }
 
 func (l *Log) Read(off uint64) (*api.Record, error) {
@@ -107,7 +108,7 @@ func (l *Log) Read(off uint64) (*api.Record, error) {
 	}
 
 	if s == nil || s.nextOffset <= off {
-		return nil, fmt.Errorf("offset out of range: %d", off)
+		return nil, api.ErrOffsetOutOfRange{Offset: off}
 	}
 
 	return s.Read(off)
