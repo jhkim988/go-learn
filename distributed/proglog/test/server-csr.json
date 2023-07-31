@@ -1,0 +1,17 @@
+{
+  "CN": "127.0.0.1",
+  "hosts": ["localhost", "127.0.0.1", "::"],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "Country",
+      "L": "Locality",
+      "ST": "State",
+      "O": "Organization",
+      "OU": "Organizational Unit"
+    }
+  ]
+}
