@@ -53,7 +53,7 @@ func (m *Membership) setupSerf() error {
 	config.MemberlistConfig.BindPort = addr.Port
 	config.EventCh = m.events
 	config.NodeName = m.Config.NodeName
-	// config.Tags: 클러스터에 노드를 어떻게 다룰지 알려주고, 서로 RPC 를 요청할 수 있다. 클러스터 합의 시에 투표자 여부또한 공유
+	config.Tags = m.Tags // 클러스터에 노드를 어떻게 다룰지 알려주고, 서로 RPC 를 요청할 수 있다. 클러스터 합의 시에 투표자 여부또한 공유
 
 	m.serf, err = serf.Create(config)
 	if err != nil {
