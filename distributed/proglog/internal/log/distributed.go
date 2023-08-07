@@ -309,7 +309,7 @@ func (l *logStore) FirstIndex() (uint64, error) {
 	return l.LowestOffset()
 }
 
-func (l *logStore) LastIndext() (uint64, error) {
+func (l *logStore) LastIndex() (uint64, error) {
 	off, err := l.HighestOffset()
 	return off, err
 }
