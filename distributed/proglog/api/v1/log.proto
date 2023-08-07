@@ -11,6 +11,8 @@ option go_package = "github.com/jhkim988/api/log_v1";
 message Record {
   bytes value = 1;
   uint64 offset = 2;
+  uint64 term = 3;
+  uint32 type = 4;
 }
 
 // protobuf 를 원하는 언어로 컴파일하려면 해당 언어의 런타임이 필요하다.
