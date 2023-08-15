@@ -32,6 +32,7 @@ service Log {
   rpc Consume(ConsumeRequest) returns (ConsumeResponse) {}
   rpc ConsumeStream(ConsumeRequest) returns (stream ConsumeResponse) {} // 서버 측 스트리밍, 서버는 연속한 메세지들을 읽을 수 있는 스트림을 보내준다.
   rpc ProduceStream(stream ProduceRequest) returns (stream ProduceResponse) {} // 양방향 스트리밍 RPC, 서로 독립적인 스트림이므로, 원하는 순서로 주고 받을 수 있다.
+  rpc GetServers(GetServersRequest) returns (GetServersResponse) {} // 각 서버의 주소와 서버가 리더인지 여부를 알 수 있는 메서드
 }
 
 message ProduceRequest {
@@ -48,4 +49,16 @@ message ConsumeRequest {
 
 message ConsumeResponse {
   Record record = 1;
+}
+
+message GetServersRequest{}
+
+message GetServersResponse {
+  repeated Server servers = 1;
+}
+
+message Server {
+  string id = 1;
+  string rpc_addr = 2;
+  bool is_leader = 3;
 }
