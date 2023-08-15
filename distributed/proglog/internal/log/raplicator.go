@@ -1,3 +1,4 @@
+// DistributedLog 는 raft 에서 제공하는 coordinated replication 을 사용하므로, raplicator 는 필요 없다.
 package log
 
 import (

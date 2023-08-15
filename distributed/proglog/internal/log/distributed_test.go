@@ -43,7 +43,7 @@ func TestMultipleNodes(t *testing.T) {
 			config.Raft.Bootstrap = true
 		}
 
-		l, err := log.NewDistritubedLog(dataDir, config)
+		l, err := log.NewDistributedLog(dataDir, config)
 		require.NoError(t, err)
 
 		if i != 0 {

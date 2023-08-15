@@ -1,27 +1,32 @@
 package agent
 
 import (
+	"bytes"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"sync"
+	"time"
 
-	api "github.com/jhkim988/proglog/api/v1"
+	"github.com/hashicorp/raft"
 	"github.com/jhkim988/proglog/internal/auth"
 	"github.com/jhkim988/proglog/internal/discovery"
 	"github.com/jhkim988/proglog/internal/log"
 	"github.com/jhkim988/proglog/internal/server"
+	"github.com/soheilhy/cmux"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 
 type Agent struct {
-	Config
-	log          *log.Log
-	server       *grpc.Server
-	membership   *discovery.Membership
-	replicator   *log.Replicator
+	Config     Config
+	mux        cmux.CMux
+	log        *log.DistributedLog
+	server     *grpc.Server
+	membership *discovery.Membership
+	// replicator *log.Replicator
 	shutdown     bool
 	shutdowns    chan struct{}
 	shutdownLock sync.Mutex
@@ -37,6 +42,7 @@ type Config struct {
 	StartJoinAddrs  []string
 	ACLModelFile    string
 	ACLPolicyFile   string
+	Bootstrap       bool
 }
 
 func (c Config) RPCAddr() (string, error) {
@@ -55,6 +61,7 @@ func New(config Config) (*Agent, error) {
 
 	setup := []func() error{
 		a.setupLogger,
+		a.setupMux,
 		a.setupLog,
 		a.setupServer,
 		a.setupMembership,
@@ -66,6 +73,7 @@ func New(config Config) (*Agent, error) {
 		}
 	}
 
+	go a.serve()
 	return a, nil
 }
 
@@ -77,12 +85,60 @@ func (a *Agent) setupLogger() error {
 	zap.ReplaceGlobals(logger)
 	return nil
 }
+
+// RPC 주소에 대한 리스너를 생성하여 raft 와 gRPC 연결 요청을 받고 mux 를 생성한다.
+func (a *Agent) setupMux() error {
+	rpcAddr := fmt.Sprintf(":%d", a.Config.RPCPort)
+	ln, err := net.Listen("tcp", rpcAddr)
+	if err != nil {
+		return err
+	}
+	a.mux = cmux.New(ln)
+	return nil
+}
+
 func (a *Agent) setupLog() error {
-	var err error
-	a.log, err = log.NewLog(
-		a.Config.DataDir,
-		log.Config{},
+	/*
+		var err error
+		a.log, err = log.NewLog(
+			a.Config.DataDir,
+			log.Config{},
+		)
+		return err
+	*/
+
+	// raft 와 매칭해주는 규칙을 설정하고 분산 로그를 생성하도록 수정한다.
+	raftLn := a.mux.Match(func(reader io.Reader) bool {
+		b := make([]byte, 1)
+		if _, err := reader.Read(b); err != nil {
+			return false
+		}
+		// gRPC 연결에서 raft 연결을 알아내는 방법은, 한 바이트를 먼저 보내서 구분한다. (log.RaftRPC)
+		return bytes.Equal(b, []byte{byte(log.RaftRPC)})
+	})
+
+	logConfig := log.Config{}
+	logConfig.Raft.StreamLayer = log.NewStreamLayer(
+		raftLn,
+		a.Config.ServerTLSConfig,
+		a.Config.PeerTLSConfig,
 	)
+
+	logConfig.Raft.LocalID = raft.ServerID(a.Config.NodeName)
+	logConfig.Raft.Bootstrap = a.Config.Bootstrap
+	logConfig.Raft.CommitTimeout = 1000 * time.Millisecond
+
+	var err error
+	a.log, err = log.NewDistributedLog(
+		a.Config.DataDir,
+		logConfig,
+	)
+	if err != nil {
+		return err
+	}
+	if a.Config.Bootstrap {
+		err = a.log.WaitForLeader(3 * time.Second)
+	}
 	return err
 }
 func (a *Agent) setupServer() error {
@@ -106,23 +162,31 @@ func (a *Agent) setupServer() error {
 		return err
 	}
 
-	rpcAddr, err := a.RPCAddr()
-	if err != nil {
-		return err
-	}
+	/*
+		rpcAddr, err := a.RPCAddr()
+		if err != nil {
+			return err
+		}
 
-	ln, err := net.Listen("tcp", rpcAddr)
-	if err != nil {
-		return err
-	}
+		ln, err := net.Listen("tcp", rpcAddr)
+		if err != nil {
+			return err
+		}
 
+		go func() {
+			if err := a.server.Serve(ln); err != nil {
+				_ = a.Shutdown()
+				return
+			}
+		}()
+	*/
+
+	grpcLn := a.mux.Match(cmux.Any())
 	go func() {
-		if err := a.server.Serve(ln); err != nil {
+		if err := a.server.Serve(grpcLn); err != nil {
 			_ = a.Shutdown()
-			return
 		}
 	}()
-
 	return nil
 }
 
@@ -131,22 +195,34 @@ func (a *Agent) setupMembership() error {
 	if err != nil {
 		return err
 	}
-	var opts []grpc.DialOption
-	if a.Config.PeerTLSConfig != nil {
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(a.Config.PeerTLSConfig)))
-	}
+	/*
+		var opts []grpc.DialOption
+		if a.Config.PeerTLSConfig != nil {
+			opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(a.Config.PeerTLSConfig)))
+		}
 
-	conn, err := grpc.Dial(rpcAddr, opts...)
-	if err != nil {
+		conn, err := grpc.Dial(rpcAddr, opts...)
+		if err != nil {
+			return err
+		}
+
+		client := api.NewLogClient(conn)
+		a.replicator = &log.Replicator{
+			DialOptions: opts,
+			LocalServer: client,
+		}
+		a.membership, err = discovery.New(a.replicator, discovery.Config{
+			NodeName: a.Config.NodeName,
+			BindAddr: a.Config.BindAddr,
+			Tags: map[string]string{
+				"rpc_addr": rpcAddr,
+			},
+			StartJoinAddrs: a.Config.StartJoinAddrs,
+		})
 		return err
-	}
+	*/
 
-	client := api.NewLogClient(conn)
-	a.replicator = &log.Replicator{
-		DialOptions: opts,
-		LocalServer: client,
-	}
-	a.membership, err = discovery.New(a.replicator, discovery.Config{
+	a.membership, err = discovery.New(a.log, discovery.Config{
 		NodeName: a.Config.NodeName,
 		BindAddr: a.Config.BindAddr,
 		Tags: map[string]string{
@@ -167,7 +243,7 @@ func (a *Agent) Shutdown() error {
 	close(a.shutdowns)
 	shutdown := []func() error{
 		a.membership.Leave,
-		a.replicator.Close,
+		// a.replicator.Close,
 		func() error {
 			a.server.GracefulStop()
 			return nil
@@ -176,8 +252,16 @@ func (a *Agent) Shutdown() error {
 	}
 	for _, fn := range shutdown {
 		if err := fn(); err != nil {
-			return nil
+			return err
 		}
+	}
+	return nil
+}
+
+func (a *Agent) serve() error {
+	if err := a.mux.Serve(); err != nil {
+		_ = a.Shutdown()
+		return err
 	}
 	return nil
 }

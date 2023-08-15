@@ -23,7 +23,7 @@ type DistributedLog struct {
 	raft    *raft.Raft
 }
 
-func NewDistritubedLog(dataDir string, config Config) (*DistributedLog, error) {
+func NewDistributedLog(dataDir string, config Config) (*DistributedLog, error) {
 	l := &DistributedLog{
 		config: config,
 	}
