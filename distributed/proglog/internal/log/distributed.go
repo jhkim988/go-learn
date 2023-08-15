@@ -98,7 +98,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	maxPool := 5
 	timeout := 10 * time.Second
 	transport := raft.NewNetworkTransport(
-		*l.config.Raft.StreamLayer,
+		l.config.Raft.StreamLayer,
 		maxPool,
 		timeout,
 		os.Stderr,
@@ -143,7 +143,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 
 	/* 클러스터 부트스트랩 실행 */
 	/* 부트스트랩은 서버 자신을 유일한 투표자로 설정하고 리더가 될 때까지 기다린 다음, 리더가 더 많은 서버를 클러스터에 추가하도록 한다.*/
-	if l.config.Raft.Bootstreap && !hasState {
+	if l.config.Raft.Bootstrap && !hasState {
 		config := raft.Configuration{
 			Servers: []raft.Server{{
 				ID:      config.LocalID,
